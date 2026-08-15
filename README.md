@@ -102,9 +102,9 @@ academic-rag/
 │   └── pipeline.py          # Orchestrates router → retrieval → generation
 ├── scripts/
 │   ├── build_index.py       # (Re)build the indexes from data/pdfs/
-│   └── evaluate.py          # Quantifies retrieval quality improvement
+│   └── evaluate.py         
 ├── eval/
-│   └── sample_qa.json       # Template eval set (replace with your own Q/A pairs)
+│   └── sample_qa.json       
 └── data/
     ├── pdfs/                 # PDFs storage
     └── chroma_db/            # generated vector index

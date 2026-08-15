@@ -1,6 +1,5 @@
-"""
-Run with:  streamlit run app.py
-"""
+# Run with:  streamlit run app.py
+
 import io
 import json
 import logging
@@ -8,7 +7,7 @@ import threading
 import time
 from pathlib import Path
 
-import fitz  
+import fitz  # PyMuPDF
 import streamlit as st
 from PIL import Image
 
@@ -19,44 +18,46 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(me
 
 st.set_page_config(page_title="Academic Literature RAG", layout="wide")
 
-# Global CSS
+
 st.markdown(
     """
     <style>
-    /* Scrollable chat pane fills remaining viewport height */
-    div[data-testid="stVerticalBlockBorderWrapper"] > div[data-testid="stVerticalBlock"]
-        div[data-testid="stContainer"] {
-        scrollbar-width: thin;
+    /* ---- Lock the page itself to the viewport height ------------------
+       Only the two inner panels (chat history / PDF preview) get their
+       own scrollbar; the outer page never scrolls. No colors are touched
+       here - theme (light/dark/custom) is left completely alone. */
+    [data-testid="stAppViewContainer"] .main .block-container {
+        max-height: 100vh;
+        overflow: hidden;
+        padding-top: 2rem;
+        padding-bottom: 0.5rem;
     }
+    html, body { overflow: hidden; }
+    /* The sidebar keeps its own natural scrolling, untouched */
+    section[data-testid="stSidebar"] { overflow-y: auto; }
 
-    /* Polish the native (already-pinned) chat input bar */
+    /* ---- Chat input polish only - NO background/color overrides ------
+       st.chat_input is already pinned to the bottom by Streamlit itself;
+       this only adds a theme-aware hairline divider so it reads as docked. */
     [data-testid="stBottom"] {
-        background: linear-gradient(to top, rgba(14,17,23,0.97) 60%, rgba(14,17,23,0.75));
-        backdrop-filter: blur(6px);
-        border-top: 1px solid rgba(255,255,255,0.08);
+        border-top: 1px solid rgba(128, 128, 128, 0.25);
     }
     [data-testid="stChatInput"] textarea {
         border-radius: 14px !important;
     }
 
-    /* Pulsing animated glow bar shown while a question is being processed */
+    /* ---- Pulsing / breathing glow bar (single accent color, no sweep) */
     .glow-bar-wrap { padding: 4px 0 10px 0; }
     .glow-bar {
-        height: 5px;
+        height: 4px;
         width: 100%;
         border-radius: 999px;
-        background: linear-gradient(270deg, #7C6CFF, #17C3FF, #7C6CFF);
-        background-size: 600% 600%;
-        animation: glow-move 2.2s ease infinite, glow-shadow 2.2s ease infinite;
+        background: var(--primary-color, #7C6CFF);
+        animation: glow-breathe 1.6s ease-in-out infinite;
     }
-    @keyframes glow-move {
-        0%   { background-position: 0% 50%; }
-        50%  { background-position: 100% 50%; }
-        100% { background-position: 0% 50%; }
-    }
-    @keyframes glow-shadow {
-        0%, 100% { box-shadow: 0 0 4px 1px rgba(124,108,255,0.45); }
-        50%      { box-shadow: 0 0 12px 3px rgba(23,195,255,0.75); }
+    @keyframes glow-breathe {
+        0%, 100%   { opacity: 0.28; box-shadow: 0 0 2px 0px var(--primary-color, #7C6CFF); }
+        50%        { opacity: 1;    box-shadow: 0 0 14px 4px var(--primary-color, #7C6CFF); }
     }
 
     /* Blinking typing cursor used during progressive answer reveal */
@@ -66,6 +67,8 @@ st.markdown(
     """,
     unsafe_allow_html=True,
 )
+
+
 # Session state
 if "messages" not in st.session_state:
     st.session_state.messages = []  # list of {role, content, citations, query_type}
@@ -77,7 +80,7 @@ def set_preview(citation: dict):
     st.session_state.preview = citation
 
 
-# PDF page rendering helper
+# PDF page rendering helper 
 @st.cache_data(show_spinner=False)
 def render_pdf_page(source_path: str, page_number: int, snippet: str = "") -> bytes:
     """Render a single PDF page to a PNG, highlighting the cited snippet
@@ -86,8 +89,6 @@ def render_pdf_page(source_path: str, page_number: int, snippet: str = "") -> by
     page = doc[page_number - 1]
 
     if snippet:
-        # Search for a short, distinctive slice of the snippet (full snippets
-        # rarely match exactly due to whitespace/line-break differences).
         needle = " ".join(snippet.split())[:80]
         for rect in page.search_for(needle):
             highlight = page.add_highlight_annot(rect)
@@ -100,7 +101,6 @@ def render_pdf_page(source_path: str, page_number: int, snippet: str = "") -> by
     return img_bytes
 
 
-# Layout
 def render_citation_buttons(msg):
     if not msg.get("citations"):
         return
@@ -111,6 +111,9 @@ def render_citation_buttons(msg):
         with cols[i % len(cols)]:
             if st.button(label, key=f"cite_{id(msg)}_{i}"):
                 set_preview(cit)
+
+
+# Header
 st.title("📚 Academic Literature RAG Assistant")
 st.caption(
     "Ask questions across your entire related-work / bibliography folder. "
@@ -133,15 +136,19 @@ if not config.CHROMA_DIR.exists() or not any(config.CHROMA_DIR.iterdir() if conf
 
 left, right = st.columns([3, 2], gap="large")
 
+
+# Left panel: chat history (scrolls independently) + pinned input
 with left:
-    chat_container = st.container(height=560)
+    
+    chat_container = st.container(height=620)
     with chat_container:
         for msg in st.session_state.messages:
             with st.chat_message(msg["role"]):
                 st.markdown(msg["content"])
                 render_citation_buttons(msg)
 
-    question = st.chat_input("Ask about your papers (e.g. 'What dataset did the ViT paper use?')")
+    question = st.chat_input("Ask about your papers (e.g. 'What dataset did the RAPTOR paper use?')")
+
     if question:
         st.session_state.messages.append({"role": "user", "content": question})
         with chat_container:
@@ -149,7 +156,8 @@ with left:
                 st.markdown(question)
 
             with st.chat_message("assistant"):
-                # Interactive "reasoning" status dropdown 
+                # Interactive "reasoning" status dropdown
+                
                 result_holder = {}
 
                 def _worker():
@@ -188,7 +196,7 @@ with left:
                     else:
                         status.update(label="✅ Answer ready", state="complete", expanded=False)
 
-                # --- Answer: progressive, "typed" reveal --------------------
+                # Answer: progressive, "typed" reveal
                 answer_slot = st.empty()
                 if "error" in result_holder:
                     full_answer = f"⚠️ Error: {result_holder['error']}"
@@ -221,24 +229,30 @@ with left:
         if citations:
             set_preview(citations[0])
         st.rerun()
+
+# Right panel: PDF preview
 with right:
     st.subheader("📄 Source preview")
-    preview = st.session_state.preview
-    if preview is None:
-        st.info("Click a citation tag on the left to preview the source page here.")
-    else:
-        st.markdown(f"**{preview['paper_title']}** — page {preview['page']}")
-        source_path = preview.get("source")
-        try:
-            img_bytes = render_pdf_page(source_path, int(preview["page"]), preview.get("snippet", ""))
-            st.image(Image.open(io.BytesIO(img_bytes)), use_container_width=True)
-        except Exception as e:  # noqa: BLE001
-            st.error(f"Could not render page: {e}")
-        with st.expander("Cited snippet (text)"):
-            st.write(preview.get("snippet", ""))
+    # Same fixed-height + internal-scroll treatment as the chat pane, so a
+    # tall rendered page can never grow the outer page and force it to scroll.
+    preview_container = st.container(height=620)
+    with preview_container:
+        preview = st.session_state.preview
+        if preview is None:
+            st.info("Click a citation tag on the left to preview the source page here.")
+        else:
+            st.markdown(f"**{preview['paper_title']}** — page {preview['page']}")
+            source_path = preview.get("source")
+            try:
+                img_bytes = render_pdf_page(source_path, int(preview["page"]), preview.get("snippet", ""))
+                st.image(Image.open(io.BytesIO(img_bytes)), use_container_width=True)
+            except Exception as e:  # noqa: BLE001
+                st.error(f"Could not render page: {e}")
+            with st.expander("Cited snippet (text)"):
+                st.write(preview.get("snippet", ""))
 
 
-# Sidebar: corpus status / admin
+# Sidebar: corpus status / admin 
 with st.sidebar:
     st.header("Corpus")
     pdf_count = len(list(config.PDF_DIR.glob("*.pdf"))) if config.PDF_DIR.exists() else 0
