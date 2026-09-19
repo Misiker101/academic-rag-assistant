@@ -38,23 +38,6 @@ def get_reranker() -> CrossEncoder:
     return _reranker
 
 
-def build_hybrid_retriever(k: int = config.TOP_K_CANDIDATES):
-    """Combine Chroma (dense) + BM25 (sparse) retrievers into one hybrid
-    retriever using LangChain's EnsembleRetriever (reciprocal rank fusion)."""
-    vectorstore = indexing.load_vectorstore()
-    dense_retriever = vectorstore.as_retriever(search_kwargs={"k": k})
-
-    bm25_data = indexing.load_bm25_index()
-    bm25_retriever = BM25Retriever.from_documents(bm25_data["docs"])
-    bm25_retriever.k = k
-
-    hybrid = EnsembleRetriever(
-        retrievers=[dense_retriever, bm25_retriever],
-        weights=[config.HYBRID_VECTOR_WEIGHT, 1 - config.HYBRID_VECTOR_WEIGHT],
-    )
-    return hybrid
-
-
 def filter_by_paper(docs: List[Document], paper_title_hint: Optional[str]) -> List[Document]:
     """If the user mentioned a specific paper title/filename, narrow the
     candidate pool down to that paper only (soft substring match)."""
