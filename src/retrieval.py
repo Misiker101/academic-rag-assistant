@@ -55,20 +55,6 @@ def build_hybrid_retriever(k: int = config.TOP_K_CANDIDATES):
     return hybrid
 
 
-def filter_by_paper(docs: List[Document], paper_title_hint: Optional[str]) -> List[Document]:
-    """If the user mentioned a specific paper title/filename, narrow the
-    candidate pool down to that paper only (soft substring match)."""
-    if not paper_title_hint:
-        return docs
-    hint = paper_title_hint.lower()
-    filtered = [
-        d
-        for d in docs
-        if hint in d.metadata.get("paper_title", "").lower()
-        or hint in d.metadata.get("filename", "").lower()
-    ]
-    return filtered or docs  # fall back to unfiltered if nothing matched
-
 
 def rerank(query: str, docs: List[Document], top_k: int = config.TOP_K_FINAL) -> List[Document]:
     """Cross-encoder re-ranking: scores each (query, chunk) pair jointly,
